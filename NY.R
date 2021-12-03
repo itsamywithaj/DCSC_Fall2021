@@ -1,4 +1,4 @@
-# --- Amy Jiravisitcul. 1 Dec 2021 ---
+# --- Amy Jiravisitcul. 3 Dec 2021 ----
 rm(list = ls())
 library(knitr)
 library(dplyr)
@@ -30,18 +30,21 @@ full_entities <- enrl %>%
            county == "NEW YORK"|
            county == "BRONX"|
            county == "RICHMOND")%>% 
-  mutate(district = case_when(county == "ERIE" &`school type`=="CHARTER" ~ "BUFFALO",
-                              county == "MONROE" & `school type`=="CHARTER" ~ "ROCHESTER",
-                              county == "KINGS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
+  mutate(district = case_when(str_detect(`district name`, "NYC GEOG") ~ # re-format NYC public schools
+                                paste0("NYC GEOG DISTRICT #", substr(`state location id`, 3, 4)),
+                              county == "ERIE" &`school type`=="CHARTER" ~ "BUFFALO", # include charter demographics
+                              county == "MONROE" & `school type`=="CHARTER" ~ "ROCHESTER", # in district counts
+                              county == "KINGS" ~ paste0("NYC GEOG DISTRICT #",
                                                          substr(`state location id`, 3, 4)),
-                              county == "QUEENS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
+                              county == "QUEENS" ~ paste0("NYC GEOG DISTRICT #",
                                                           substr(`state location id`, 3, 4)),
-                              county == "BRONX" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
+                              county == "BRONX" ~ paste0("NYC GEOG DISTRICT #",
                                                           substr(`state location id`, 3, 4)),
-                              county == "RICHMOND" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
+                              county == "RICHMOND" ~ paste0("NYC GEOG DISTRICT #",
                                                           substr(`state location id`, 3, 4)),
-                              county == "NEW YORK" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                            substr(`state location id`,3,4)),TRUE ~ `district name`),
+                              county == "NEW YORK" ~ paste0("NYC GEOG DISTRICT #",
+                                                            substr(`state location id`,3,4)),
+                              TRUE ~ `district name`),
          id_code = `state location id`,
          school = `location name`,
          type = `school type`,
@@ -59,6 +62,9 @@ full_entities <- full_entities %>%
          white = as.numeric(`White`),
          total = amind + asian + black + hisp + mult + white) %>% 
   select(id_code,county, district, school, type, total, amind, asian, black, hisp, mult, white)
+
+cumulative <- full_entities
+
 full_entities <- full_entities %>% 
   mutate(amind = amind/total,
          asian = asian/total,
@@ -94,18 +100,21 @@ locseg <- enrl %>%
            county == "NEW YORK"|
            county == "BRONX"|
            county == "RICHMOND")%>% 
-  mutate(district = case_when(county == "ERIE" &`school type`=="CHARTER" ~ "BUFFALO",
-                              county == "MONROE" & `school type`=="CHARTER" ~ "ROCHESTER",
-                              county == "KINGS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
+  mutate(district = case_when(str_detect(`district name`, "NYC GEOG") ~ # re-format NYC public schools
+                                paste0("NYC GEOG DISTRICT #", substr(`state location id`, 3, 4)),
+                              county == "ERIE" &`school type`=="CHARTER" ~ "BUFFALO", # include charter demographics
+                              county == "MONROE" & `school type`=="CHARTER" ~ "ROCHESTER", # in district counts
+                              county == "KINGS" ~ paste0("NYC GEOG DISTRICT #",
                                                          substr(`state location id`, 3, 4)),
-                              county == "QUEENS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
+                              county == "QUEENS" ~ paste0("NYC GEOG DISTRICT #",
                                                           substr(`state location id`, 3, 4)),
-                              county == "BRONX" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
+                              county == "BRONX" ~ paste0("NYC GEOG DISTRICT #",
                                                          substr(`state location id`, 3, 4)),
-                              county == "RICHMOND" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
+                              county == "RICHMOND" ~ paste0("NYC GEOG DISTRICT #",
                                                             substr(`state location id`, 3, 4)),
-                              county == "NEW YORK" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                            substr(`state location id`,3,4)),TRUE ~ `district name`),
+                              county == "NEW YORK" ~ paste0("NYC GEOG DISTRICT #",
+                                                            substr(`state location id`,3,4)),
+                              TRUE ~ `district name`),
          id_code = `state location id`,
          school = `location name`,
          type = `school type`,
@@ -113,6 +122,48 @@ locseg <- enrl %>%
          total = `pk12 total`) %>% 
   group_by(county) %>% 
   select(id_code, county, district, school, type,subgroup, total)
+
+
+
+#--- Cumulative race by county and district -----
+cumulative_county <- cumulative %>% 
+  filter(county == "ERIE"|
+           county == "MONROE"|
+           county == "KINGS"|
+           county == "QUEENS"|
+           county == "NEW YORK"|
+           county == "BRONX"|
+           county == "RICHMOND") %>% 
+  group_by(county) %>% 
+  summarize(county_total = sum(total),
+            county_amind = sum(amind)/county_total,
+            county_asian = sum(asian)/county_total,
+            county_black = sum(black)/county_total,
+            county_hisp = sum(hisp)/county_total,
+            county_white = sum(white)/county_total,
+            county_mult = sum(mult)/county_total)
+
+memb_enrl %>% distinct(district) %>% 
+  arrange(district) %>% 
+  mutate(district = substr(district,18,21)) %>% View()
+cumulative_district <- cumulative %>% 
+  filter(district == "BUFFALO"|
+           district == "ROCHESTER"|
+           str_detect(district, "#02")|str_detect(district, "#03")|str_detect(district, "#04")|
+           str_detect(district, "#05")|str_detect(district, "#06")|str_detect(district, "#07")|
+           str_detect(district, "#08")|str_detect(district, "#09")|str_detect(district, "#13")|
+           str_detect(district, "#14")|str_detect(district, "#15")|str_detect(district, "#16")|
+           str_detect(district, "#17")|str_detect(district, "#21")|str_detect(district, "#22")|
+           str_detect(district, "#24")|str_detect(district, "#27")|str_detect(district, "#29")|
+           str_detect(district, "#30")|str_detect(district, "#31")|str_detect(district, "#32")) %>% 
+  group_by(district) %>% 
+  summarize(district_total = sum(total),
+            district_amind = sum(amind)/district_total,
+            district_asian = sum(asian)/district_total,
+            district_black = sum(black)/district_total,
+            district_hisp = sum(hisp)/district_total,
+            district_white = sum(white)/district_total,
+            district_mult = sum(mult)/district_total)
 
 # Erie County and Buffalo
 erie_locseg <- locseg %>% 
@@ -198,7 +249,7 @@ temp <- merge(temp,z,by="school")
 temp <- unique(temp) #remove duplicate rows
 
 d13_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #13") %>% 
+  filter(district == "NYC GEOG DISTRICT #13") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 
@@ -220,7 +271,7 @@ d13 <- d13 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d14_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #14") %>% 
+  filter(district == "NYC GEOG DISTRICT #14") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 
@@ -243,7 +294,7 @@ d14 <- d14 %>%
 
 
 d15_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #15") %>% 
+  filter(district == "NYC GEOG DISTRICT #15") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 
@@ -265,7 +316,7 @@ d15 <- d15 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d16_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #16") %>% 
+  filter(district == "NYC GEOG DISTRICT #16") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 
@@ -288,7 +339,7 @@ d16 <- d16 %>%
 
 
 d17_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #17") %>% 
+  filter(district == "NYC GEOG DISTRICT #17") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 
@@ -311,7 +362,7 @@ d17 <- d17 %>%
 
 
 d21_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #21") %>% 
+  filter(district == "NYC GEOG DISTRICT #21") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 
@@ -333,7 +384,7 @@ d21 <- d21 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d22_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #22") %>% 
+  filter(district == "NYC GEOG DISTRICT #22") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 
@@ -355,7 +406,7 @@ d22 <- d22 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d32_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #32") %>% 
+  filter(district == "NYC GEOG DISTRICT #32") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 
@@ -400,7 +451,7 @@ temp <- merge(temp,z,by="school")
 temp <- unique(temp) #remove duplicate rows
 
 d02_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #02") %>% 
+  filter(district == "NYC GEOG DISTRICT #02") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d02 <- d02_locseg %>% 
@@ -415,7 +466,7 @@ d02 <- d02 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d03_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #03") %>% 
+  filter(district == "NYC GEOG DISTRICT #03") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d03 <- d03_locseg %>% 
@@ -430,7 +481,7 @@ d03 <- d03 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d04_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #04") %>% 
+  filter(district == "NYC GEOG DISTRICT #04") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d04 <- d04_locseg %>% 
@@ -445,7 +496,7 @@ d04 <- d04 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d05_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #05") %>% 
+  filter(district == "NYC GEOG DISTRICT #05") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d05 <- d05_locseg %>% 
@@ -460,7 +511,7 @@ d05 <- d05 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d06_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #06") %>% 
+  filter(district == "NYC GEOG DISTRICT #06") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d06 <- d06_locseg %>% 
@@ -495,7 +546,7 @@ temp <- merge(temp,z,by="school")
 temp <- unique(temp) #remove duplicate rows
 
 d07_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #07") %>% 
+  filter(district == "NYC GEOG DISTRICT #07") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d07 <- d07_locseg %>% 
@@ -508,7 +559,7 @@ d07 <- d07 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d08_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #08") %>% 
+  filter(district == "NYC GEOG DISTRICT #08") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d08 <- d08_locseg %>% 
@@ -521,7 +572,7 @@ d08 <- d08 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d09_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #09") %>% 
+  filter(district == "NYC GEOG DISTRICT #09") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d09 <- d09_locseg %>% 
@@ -558,7 +609,7 @@ temp <- unique(temp) #remove duplicate rows
 
 
 d24_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #24") %>% 
+  filter(district == "NYC GEOG DISTRICT #24") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d24 <- d24_locseg %>% 
@@ -573,7 +624,7 @@ d24 <- d24 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d27_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #27") %>% 
+  filter(district == "NYC GEOG DISTRICT #27") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d27 <- d27_locseg %>% 
@@ -588,7 +639,7 @@ d27 <- d27 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d29_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #29") %>% 
+  filter(district == "NYC GEOG DISTRICT #29") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d29 <- d29_locseg %>% 
@@ -603,7 +654,7 @@ d29 <- d29 %>%
   select(id_code, school, district, county, ls_county, p_county, ls_district, p_district)
 
 d30_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #30") %>% 
+  filter(district == "NYC GEOG DISTRICT #30") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d30 <- d30_locseg %>% 
@@ -639,7 +690,7 @@ temp <- unique(temp) #remove duplicate rows
 
 
 d31_locseg <- locseg %>% 
-  filter(district == "NEW YORK CITY GEOGRAPHIC DISTRICT #31") %>% 
+  filter(district == "NYC GEOG DISTRICT #31") %>% 
   mutual_local("subgroup","school",weight = "total", wide = TRUE) %>% 
   arrange(ls)
 d31 <- d31_locseg %>% 
@@ -673,26 +724,14 @@ econ_entities <- econdis %>%
            county == "NEW YORK"|
            county == "BRONX"|
            county == "RICHMOND")%>% 
-  mutate(district = case_when(county == "ERIE" &`school type`=="CHARTER" ~ "BUFFALO CITY SCHOOL DISTRICT",
-                              county == "MONROE" &`school type`=="CHARTER"~ "ROCHESTER CITY SCHOOL DISTRICT",
-                              county == "KINGS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                         substr(`state location id`, 3, 4)),
-                              county == "QUEENS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                          substr(`state location id`, 3, 4)),
-                              county == "BRONX" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                         substr(`state location id`, 3, 4)),
-                              county == "RICHMOND" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                            substr(`state location id`, 3, 4)),
-                              county == "NEW YORK" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                            substr(`state location id`,3,4)),TRUE ~ `district name`),
-         id_code = `state location id`,
-         school = `location name`,
-         type = `school type`,
+  mutate(id_code = `state location id`,
          subgroup = `subgroup name`,
          econdis = `pk12 total`) %>% 
   filter(subgroup == "Economically Disadvantaged") %>% 
-  select(id_code, county, district, school, type, econdis)
-memb_enrl <- merge(memb_enrl,econ_entities,by=c("school","id_code","county","district","type"))
+  select(id_code,econdis)
+memb_enrl <- merge(memb_enrl,econ_entities,by=c("id_code"))
+memb_enrl <- memb_enrl %>% 
+  mutate(econdis = as.numeric(econdis)/total)
 
 ell <- read_excel("raw data/NY_PublicSchool2021LEP.xlsx")
 names(ell) <- tolower(names(ell))
@@ -706,31 +745,14 @@ ell_entities <- ell %>%
            county == "NEW YORK"|
            county == "BRONX"|
            county == "RICHMOND")%>% 
-  mutate(district = case_when(county == "ERIE" &`school type`=="CHARTER" ~ "BUFFALO CITY SCHOOL DISTRICT",
-                              county == "MONROE" &`school type`=="CHARTER" ~ "ROCHESTER CITY SCHOOL DISTRICT",
-                              county == "KINGS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                         substr(`state location id`, 3, 4)),
-                              county == "QUEENS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                          substr(`state location id`, 3, 4)),
-                              county == "BRONX" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                         substr(`state location id`, 3, 4)),
-                              county == "RICHMOND" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                            substr(`state location id`, 3, 4)),
-                              county == "NEW YORK" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                            substr(`state location id`,3,4)),TRUE ~ `district name`),
-         id_code = `state location id`,
-         school = `location name`,
-         type = `school type`,
+  mutate(id_code = `state location id`,
          subgroup = `subgroup name`,
          ell = `pk12 total`) %>% 
   filter(subgroup == "Not English Language Learner") %>% 
-  select(id_code, county, district, school, type, ell)
-z <- merge(memb_enrl,ell_entities,by=c("school","id_code","county","district","type"))
+  select(id_code, ell)
+z <- merge(memb_enrl,ell_entities,by=c("id_code"))
 memb_enrl <- z %>% 
-  mutate(econdis = as.numeric(econdis)/total,
-         ell = (total - as.numeric(ell))/total)
-
-
+  mutate(ell = (total - as.numeric(ell))/total)
 
 swd <- read_excel("raw data/NY_PublicSchool2021SWD.xlsx")
 names(swd) <- tolower(names(swd))
@@ -744,38 +766,125 @@ swd_entities <- swd %>%
            county == "NEW YORK"|
            county == "BRONX"|
            county == "RICHMOND")%>% 
-  mutate(district = case_when(county == "ERIE" &`school type`=="CHARTER" ~ "BUFFALO CITY SCHOOL DISTRICT",
-                              county == "MONROE" &`school type`=="CHARTER" ~ "ROCHESTER CITY SCHOOL DISTRICT",
-                              county == "KINGS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                         substr(`state location id`, 3, 4)),
-                              county == "QUEENS" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                          substr(`state location id`, 3, 4)),
-                              county == "BRONX" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                         substr(`state location id`, 3, 4)),
-                              county == "RICHMOND" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                            substr(`state location id`, 3, 4)),
-                              county == "NEW YORK" ~ paste0("NEW YORK CITY GEOGRAPHIC DISTRICT #",
-                                                            substr(`state location id`,3,4)),TRUE ~ `district name`),
-         id_code = `state location id`,
-         school = `location name`,
-         type = `school type`,
+  mutate(id_code = `state location id`,
          subgroup = `subgroup name`,
          swd = `pk12 total`) %>% 
   filter(subgroup == "Students with Disabilities") %>% 
-  select(id_code, county, district, school, type, swd)
-memb_enrl <- merge(memb_enrl,swd_entities,by=c("school","id_code","county","district","type"))
+  select(id_code, swd)
+memb_enrl <- merge(memb_enrl,swd_entities,by=c("id_code"))
 memb_enrl <- memb_enrl %>% 
   mutate(swd = as.numeric(swd)/total)
 
-full_entities <- merge(econ_entities,full_entities,by=c("id_code","school","district","county","type"))
-full_entities <- merge(swd_entities,full_entities,by=c("id_code","school","district","county","type"))
-full_entities <- merge(ell_entities,full_entities,by=c("id_code","school","district","county","type"))
+full_entities <- merge(econ_entities,full_entities,by=c("id_code"))
+full_entities <- merge(swd_entities,full_entities,by=c("id_code"))
+full_entities <- merge(ell_entities,full_entities,by=c("id_code"))
 
+# - Cumulative ELL SPED ECONDIS by county and district ----
 full_entities <- full_entities %>% 
   mutate(swd = as.numeric(swd)/total,
          ell = (total - as.numeric(ell))/total,
-         econdis = as.numeric(econdis)/total) %>% 
+         econdis = as.numeric(econdis)/total) %>% na.omit() 
   select(id_code, county, district, school, type, total, amind, asian, black, hisp, mult, white, econdis,ell, swd)
+
+a<- ell %>% 
+  filter(county == "ERIE"|
+           county == "MONROE"|
+           county == "KINGS"|
+           county == "QUEENS"|
+           county == "NEW YORK"|
+           county == "BRONX"|
+           county == "RICHMOND",
+         `subgroup name` == "Not English Language Learner")%>% 
+  mutate(id_code = `state location id`,
+         ell = as.numeric(`pk12 total`)) %>%
+  group_by(county) %>% 
+  summarize(county_ell = sum(ell))
+
+b <- swd %>% 
+  filter(county == "ERIE"|
+           county == "MONROE"|
+           county == "KINGS"|
+           county == "QUEENS"|
+           county == "NEW YORK"|
+           county == "BRONX"|
+           county == "RICHMOND",
+         `subgroup name` == "Students with Disabilities")%>% 
+  mutate(swd = as.numeric(`pk12 total`)) %>% na.omit() %>% 
+  group_by(county) %>%
+  summarize(county_swd = sum(swd))
+
+c <- econdis %>% 
+  filter(county == "ERIE"|
+           county == "MONROE"|
+           county == "KINGS"|
+           county == "QUEENS"|
+           county == "NEW YORK"|
+           county == "BRONX"|
+           county == "RICHMOND",
+         `subgroup name` == "Economically Disadvantaged")%>%
+  mutate(econdis = as.numeric(`pk12 total`)) %>% na.omit() %>% 
+  group_by(county) %>% 
+  summarize(county_econ = sum(econdis))
+
+c<- merge(c,a,by="county")
+c<- merge(c,b,by="county")
+cumulative_county <- merge(cumulative_county,c,by="county")
+cumulative_county <- cumulative_county %>% 
+  mutate(county_econ = county_econ/county_total,
+         county_ell = (county_total - county_ell)/county_total,
+         county_swd = county_swd/county_total)
+
+memb_enrl <- merge(memb_enrl,cumulative_county,by="county")
+
+h <- full_entities %>% select(id_code,county,district)
+ell_entities <- merge(h, ell_entities,by="id_code")
+a <- ell_entities %>% 
+  filter(county == "ERIE"|
+           county == "MONROE"|
+           county == "KINGS"|
+           county == "QUEENS"|
+           county == "NEW YORK"|
+           county == "BRONX"|
+           county == "RICHMOND")%>% 
+  mutate(ell = as.numeric(ell)) %>% na.omit() %>% 
+  group_by(district) %>% 
+  summarize(district_ell = sum(ell))
+
+swd_entities <- merge(h, swd_entities,by="id_code")
+b <- swd_entities %>% 
+  filter(county == "ERIE"|
+           county == "MONROE"|
+           county == "KINGS"|
+           county == "QUEENS"|
+           county == "NEW YORK"|
+           county == "BRONX"|
+           county == "RICHMOND")%>% 
+  mutate(swd = as.numeric(swd)) %>% na.omit() %>% 
+  group_by(district) %>% 
+  summarize(district_swd = sum(swd))
+
+econ_entities <- merge(h, econ_entities,by="id_code")
+c <- econ_entities %>% 
+  filter(county == "ERIE"|
+           county == "MONROE"|
+           county == "KINGS"|
+           county == "QUEENS"|
+           county == "NEW YORK"|
+           county == "BRONX"|
+           county == "RICHMOND")%>%
+  mutate(econdis = as.numeric(econdis)) %>% na.omit() %>% 
+  group_by(district) %>% 
+  summarize(district_econ = sum(econdis))
+
+c<- merge(c,a,by="district")
+c<- merge(c,b,by="district")
+cumulative_district <- merge(cumulative_district,c,by="district")
+cumulative_district <- cumulative_district %>% 
+  mutate(district_econ = district_econ/district_total,
+         district_ell = (district_total - district_ell)/district_total,
+         district_swd = district_swd/district_total)
+  
+memb_enrl <- merge(memb_enrl,cumulative_district,by="district")
 
 write.csv(memb_enrl, file = file.path('output data/ny_enrl.csv'),row.names =FALSE)
 
