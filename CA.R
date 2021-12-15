@@ -1,4 +1,4 @@
-# --- Amy Jiravisitcul. 2 Dec 2021 ----
+# --- Amy Jiravisitcul. 14 Dec 2021 ----
 rm(list = ls())
 setwd("~/Downloads/States from Fall 2021/")
 install.packages("tidyverse") # install tidyverse
@@ -19,8 +19,20 @@ getwd()
 enrl <- read.csv("raw data/CA_filesenr.csv")
 names(enrl) <- tolower(names(enrl))
 str(enrl)
-enrl <- enrl %>% 
-  select(school, county, district, gender, ethnic, enr_total)
+enrl <- enrl %>% mutate("K" = as.integer(as.logical(kdgn)), # change grades to logical
+                "1" = as.integer(as.logical(gr_1)),
+                "2" = as.integer(as.logical(gr_2)),
+                "3" = as.integer(as.logical(gr_3)),
+                "4" = as.integer(as.logical(gr_4)),
+                "5" = as.integer(as.logical(gr_5)),
+                "6" = as.integer(as.logical(gr_6)),
+                "7" = as.integer(as.logical(gr_7)),
+                "8" = as.integer(as.logical(gr_8)),
+                "9" = as.integer(as.logical(gr_1)),
+                "10" = as.integer(as.logical(gr_10)),
+                "11" = as.integer(as.logical(gr_11)),
+                "12" = as.integer(as.logical(gr_12))) %>% 
+  select(school, county, district, gender, ethnic, enr_total, K:"12")
 enrl$ethnic <- as.factor(enrl$ethnic)
 enrl$gender <- as.factor(enrl$gender)
 
@@ -36,10 +48,32 @@ enrl <- enrl %>% # reshape data to have a column for each ethnic category
   mutate(total = unreported + amind + asian + hisp + black + white + mult)
 levels(enrl$gender) <- c("F","F","F") # combine genders to sum it up
 enrl <- enrl %>% 
-  select(school, county, district, unreported, amind, asian, hisp, black, white, mult, total)
+  select(school, county, district, unreported, amind, asian, hisp, black, white, mult, total,K:"12")
 
 DT <- data.table(enrl)
 enrl <- DT[, lapply(.SD, sum), by=list(school, district, county)] # Summing the rows for all genders
+enrl <- enrl %>% 
+  gather(grade,dummy,K:"12",factor_key = TRUE) %>% 
+  filter(dummy > 0) %>% 
+  mutate(grade = as.character(grade))
+str(enrl)
+enrl <- enrl %>% 
+  mutate(grade = case_when(is.na(as.numeric(grade)) ~ 0,
+                           TRUE ~ as.numeric(grade))) %>%
+  arrange(school, grade)
+
+library(plyr)
+a <- ddply(enrl, .(school, district, county, unreported,
+                   amind, asian, hisp, black, white, mult, total), summarize,
+           min_grade = min(grade), # make columns for the grade range
+           max_grade = max(grade)) 
+enrl <-a %>% 
+  mutate(min_grade = as.factor(min_grade),
+         max_grade = as.factor (max_grade))
+levels(enrl$min_grade)[1] <- "K"
+levels(enrl$max_grade)[1] <- "K"
+cumulative <- enrl # student counts
+
 enrl <- enrl %>% # from counts to percentages
   mutate(p_white = white / total,
          p_amind = amind / total,
@@ -59,7 +93,11 @@ enrl <- enrl %>% # from counts to percentages
                               school == "High Tech Middle Chula Vista" ~ "Chula Vista Elementary",
                               school == "High Tech Middle Mesa" ~ "San Diego Unified",
                               school == "High Tech Middle North County" ~ "San Marcos Unified",
-                              str_detect(school, "Summit Public") == TRUE ~ "Sunnyvale",
+                              school == "Summit Public School K2"|
+                                school == "Summit Public School: Tamalpais" ~ "West Contra Costa Unified",
+                              school == "Summit Public School: Denali" ~ "Sunnyvale",
+                              school == "Summit Public School: Shasta" ~ "Jefferson Union High",
+                              school == "Summit Public School: Tahoma" ~ "East Side Union High",
                               school == "Yu Ming Charter"|school =="Urban Montessori Charter" ~ "Oakland Unified",
                               TRUE ~ district))
 
@@ -83,10 +121,67 @@ memb_enrl <- enrl %>%
            school == "Valley Charter Middle"|
            school == "Yu Ming Charter") %>% 
   arrange(district, school) %>% 
-  select(school, county, district, total, p_amind, p_asian, p_black, 
+  select(school, county, district, min_grade, max_grade, total, p_amind, p_asian, p_black, 
          p_hisp, p_white, p_mult, p_unreported)
 
-# Percentages for districts and counties... 
+
+# Percentages for districts and counties
+memb_enrl %>% select(county) %>% unique()
+cumulative_county %>% select(county) %>% unique()
+DT <- data.table(cumulative %>% select(county, unreported:total))
+cumulative_county <- DT[, lapply(.SD, sum), by=list(county)] # Summing the rows for all counties
+cumulative_county <- cumulative_county %>%
+  filter(county == "San Diego"|
+           county == "Los Angeles"|
+           county == "Alameda"|
+           county == "Orange"|
+           county == "Sacramento"|
+           county == "San Francisco"|
+           county == "Contra Costa"|
+           county == "Santa Clara"|
+           county == "San Mateo") %>% 
+  select(county, unreported:total)
+cumulative_county <- cumulative_county %>% 
+  mutate(county_total = total,
+            county_amind = amind/county_total,
+            county_asian = asian/county_total,
+            county_black = black/county_total,
+            county_hisp = hisp/county_total,
+            county_white = white/county_total,
+            county_mult = mult/county_total) %>% 
+  select(county, county_total:county_mult)
+memb_enrl <- merge(memb_enrl,cumulative_county,by="county")
+
+memb_enrl %>% select(district) %>% unique()
+DT <- data.table(cumulative %>% select(district, unreported:total))
+cumulative_district <- DT[, lapply(.SD, sum), by=list(district)] # Summing the rows for all counties
+cumulative_district <- cumulative_district %>%
+  filter(district == "Oakland Unified"|
+           district == "West Contra Costa Unified"|
+           district == "Sunnyvale"|
+           district == "Los Angeles Unified"|
+           district == "Pasadena Unified"|
+           district == "Orange Unified"|
+           district == "Sacramento City Unified"|
+           district == "Chula Vista Elementary"|
+           district == "San Diego Unified"|
+           district == "San Marcos Unified"|
+           district == "Sweetwater Union High"|
+           district == "San Francisco Unified"|
+           district == "Jefferson Union High"|
+           district == "East Side Union High") %>% 
+  select(district, unreported:total)
+cumulative_district <- cumulative_district %>% 
+  mutate(district_total = total,
+            district_amind = amind/district_total,
+            district_asian = asian/district_total,
+            district_black = black/district_total,
+            district_hisp = hisp/district_total,
+            district_white = white/district_total,
+            district_mult = mult/district_total) %>% 
+  select(district, district_total:district_mult)
+memb_enrl <- merge(memb_enrl,cumulative_district,by="district")
+
 
 write.csv(memb_enrl,file = file.path("output data/ca_enrl.csv"),row.names = FALSE)
 
@@ -380,16 +475,28 @@ sunnyvale <- locseg %>%
   arrange(ls)
 memb_enrl %>% filter(district == "Sunnyvale", county == "Santa Clara") %>% select(school)
 sc_sunnyvale <- sunnyvale %>% 
-  filter(school == "Summit Public School: Denali"|
-           school == "Summit Public School Tahoma")  %>%  #
+  filter(school == "Summit Public School: Denali")  %>%  #
   mutate(district = "Sunnyvale",
          ls_district = ls,
          p_district = p) %>% 
   select(school, district, ls_district, p_district)
 memb_enrl %>% filter(county == "Santa Clara") %>% select(district) %>% unique()
 
+esuh <- locseg %>% 
+  filter(district == "East Side Union High") %>% 
+  mutual_local("subgroup","school",weight = "n", wide = TRUE) %>% 
+  arrange(ls)
+memb_enrl %>% filter(district == "East Side Union High", county == "Santa Clara") %>% select(school)
+sc_esuh <- esuh %>% 
+  filter(school =="Summit Public School: Tahoma") %>% 
+  mutate(district = "East Side Union High",
+         ls_district = ls,
+         p_district = p) %>% 
+  select(school, district, ls_district, p_district)
+
 temp <- merge(sc_sunnyvale,sc_locseg,by="school")
-memb_locseg <- rbind(memb_locseg,temp)
+temp2 <- merge(sc_esuh, sc_locseg, by="school")
+memb_locseg <- rbind(memb_locseg,temp, temp2)
 
 # Orange County ----
 orange_locseg <- locseg %>% 
@@ -464,19 +571,19 @@ sm_locseg <- sm_locseg %>%
   select(school, county, ls_county, p_county)
 memb_enrl %>% filter(county == "San Mateo") %>% select(district) %>% unique()
 
-sunnyvale <- locseg %>% 
-  filter(district == "Sunnyvale") %>% 
+juh <- locseg %>% 
+  filter(district == "Jefferson Union High") %>% 
   mutual_local("subgroup","school",weight = "n", wide = TRUE) %>% 
   arrange(ls)
-memb_enrl %>% filter(district == "Sunnyvale", county == "San Mateo") %>% select(school)
-sm_sunnyvale <- sunnyvale %>% 
+memb_enrl %>% filter(district == "Jefferson Union High", county == "San Mateo") %>% select(school)
+sm_juh <- juh %>% 
   filter(school == "Summit Public School: Shasta")  %>%  #
-  mutate(district = "Sunnyvale",
+  mutate(district = "Jefferson Union High",
          ls_district = ls,
          p_district = p) %>% 
   select(school, district, ls_district, p_district)
 
-temp <- merge(sm_sunnyvale,sm_locseg,by="school")
+temp <- merge(sm_juh,sm_locseg,by="school")
 memb_locseg <- rbind(memb_locseg,temp)
 
 
@@ -509,19 +616,19 @@ cc_locseg <- cc_locseg %>%
   select(school, county, ls_county, p_county)
 memb_enrl %>% filter(county == "Contra Costa") %>% select(district) %>% unique()
 
-sunnyvale <- locseg %>% 
-  filter(district == "Sunnyvale") %>% 
+wccu <- locseg %>% 
+  filter(district == "West Contra Costa Unified") %>% 
   mutual_local("subgroup","school",weight = "n", wide = TRUE) %>% 
   arrange(ls)
-memb_enrl %>% filter(district == "Sunnyvale", county == "Contra Costa") %>% select(school)
-cc_sunnyvale <- sunnyvale %>% 
-  filter(school == "Summit Public School: Tamalpais")  %>%  #
-  mutate(district = "Sunnyvale",
+memb_enrl %>% filter(district == "West Contra Costa Unified", county == "Contra Costa") %>% select(school)
+cc_wccu <- wccu %>% 
+  filter(str_detect(school, "Summit Public"))  %>%  #
+  mutate(district = "West Contra Costa Unified",
          ls_district = ls,
          p_district = p) %>% 
   select(school, district, ls_district, p_district)
 
-temp <- merge(cc_sunnyvale,cc_locseg,by="school")
+temp <- merge(cc_wccu,cc_locseg,by="school")
 memb_locseg <- rbind(memb_locseg,temp)
 
 
@@ -576,3 +683,159 @@ memb_locseg <- memb_locseg %>%
 write.csv(memb_locseg, file = file.path('output data/ca_locseg.csv'),row.names = FALSE)
 
 # --- ENROLLMENT BY SWD, ELL, FRPL ----
+# EL data file https://www.cde.ca.gov/ds/ad/fileselsch.asp  ----
+# Data Reporting Office dro@cde.ca.gov, Last Reviewed: 29 April 2021
+ell <- read.delim('raw data/CA_fileselsch.txt')
+names(ell) <- tolower(names(ell))
+library(dplyr)
+detach(package:plyr)
+school_ell <- ell %>%
+  select(county, district, school, total_el) %>% 
+  group_by(school) %>% 
+  summarise(ell = sum(total_el))
+county_ell <- ell %>% 
+  select(county, total_el) %>% 
+  group_by(county) %>% 
+  summarize(ell_county = sum(total_el))
+district_ell <- ell %>% 
+  select(district, total_el) %>% 
+  group_by(district) %>% 
+  summarize(ell_dist = sum(total_el))
+
+memb_ell <- school_ell %>% 
+  filter(str_detect(school, "Citizens of the World Charter School") == TRUE|
+           school == "The City" |
+           school == "City Language Immersion Charter"|
+           school == "Gateway High"|
+           school == "Gateway Middle"|
+           school == "Growth Public"|
+           school == "Gateway High"|
+           school == "Gateway Middle"|
+           str_detect(school, "High Tech") == TRUE|
+           school == "Larchmont Charter"|
+           school == "Odyssey Charter"|
+           str_detect(school, "Summit Public") == TRUE|
+           school == "Tomorrow's Leadership Collaborative (TLC) Charter"|
+           school == "Urban Montessori Charter"|
+           school == "Valley Charter Elementary" |
+           school == "Valley Charter Middle"|
+           school == "Yu Ming Charter")
+z <- memb_enrl %>% 
+  select(school, district, county, total, county_total, district_total)
+memb_ell <- merge(z,memb_ell,by="school")
+memb_ell <- merge(memb_ell,county_ell,by="county")
+memb_ell <- merge(memb_ell,district_ell, by="district")
+memb_ell <- memb_ell %>% 
+  mutate(ell = ell/total,
+         ell_dist = ell_dist/district_total,
+         ell_county = ell_county/county_total) %>% 
+  select(school, ell:ell_dist)
+memb_enrl <- merge(memb_enrl,memb_ell,by="school")
+
+
+# FRPM Data file at https://www.cde.ca.gov/ds/ad/filessp.asp ----
+frpm <- read_excel('raw data/CA_frpm2021.xlsx', sheet = "FRPM School-Level Data ")
+read_excel('raw data/CA_frpm2021.xlsx',sheet = "Data Field Descriptions") %>% View()
+colnames(frpm) <- frpm[1,]
+frpm <- frpm[-1,]
+names(frpm) <- tolower(names(frpm))
+names(frpm)[c(5:7, 21)] <- c("county","district","school","frpm") # select FRPM count
+frpm$frpm <- as.numeric(frpm$frpm) # change to numeric
+school_frpm <- frpm %>%
+  select(county, district, school, frpm) %>% 
+  group_by(school) %>% 
+  summarise(frpm = sum(frpm))
+county_frpm <- frpm %>% 
+  select(county, frpm) %>% 
+  group_by(county) %>% 
+  summarize(frpm_county = sum(frpm))
+district_frpm <- frpm %>% 
+  select(district, frpm) %>% 
+  group_by(district) %>% 
+  summarize(frpm_dist = sum(frpm))
+memb_frpm <- school_frpm %>% 
+  filter(str_detect(school, "Citizens of the World Charter School") == TRUE|
+           school == "The City" |
+           school == "City Language Immersion Charter"|
+           school == "Gateway High"|
+           school == "Gateway Middle"|
+           school == "Growth Public"|
+           school == "Gateway High"|
+           school == "Gateway Middle"|
+           str_detect(school, "High Tech") == TRUE|
+           school == "Larchmont Charter"|
+           school == "Odyssey Charter"|
+           str_detect(school, "Summit Public") == TRUE|
+           school == "Tomorrow's Leadership Collaborative (TLC) Charter"|
+           school == "Urban Montessori Charter"|
+           school == "Valley Charter Elementary" |
+           school == "Valley Charter Middle"|
+           school == "Yu Ming Charter")
+z <- memb_enrl %>% 
+  select(school, district, county, total, county_total, district_total)
+memb_frpm <- merge(z,memb_frpm,by="school")
+memb_frpm <- merge(memb_frpm,county_frpm,by="county")
+memb_frpm <- merge(memb_frpm,district_frpm, by="district")
+memb_frpm <- memb_frpm %>% 
+  mutate(frpm = frpm/total,
+         frpm_dist = frpm_dist/district_total,
+         frpm_county = frpm_county/county_total) %>% 
+  select(school, frpm:frpm_dist)
+memb_enrl <- merge(memb_enrl,memb_frpm,by="school")
+
+write.csv(memb_enrl, file = file.path('output data/ca_enrl.csv'),row.names = FALSE)
+
+# SWD data -----
+# https://www.kidsdata.org/topic/95/special-education/table#fmt=1146&loc=171,364,365,344,368,265,4,59,2,127&tf=124&sortType=asc
+swd <- read.csv('raw data/Kidsdata-special-education-Special-Education-Enrollment.csv')
+View(swd)
+names(swd) <- tolower(names(swd))
+swd <- swd %>% 
+  filter(locationtype == "School District"|
+           locationtype == "County",
+         timeframe == "2019") %>% 
+  spread(key = dataformat,
+         value = data,
+         fill = 0) %>%
+  mutate(swd = as.numeric(gsub(",","",Percent))*.01) %>% na.omit() %>% # NAs from suppressed data
+  select(locationtype, location, parentcounty, timeframe, swd)
+swd <- swd %>% arrange(location)
+sort(unique(memb_enrl$district))
+swd_dist <- swd %>% 
+  filter(locationtype=="School District",
+         location == "Chula Vista Elementary"|
+           location == "East Side Union High"|
+           location == "Jefferson Union High"|
+           location == "Los Angeles Unified"|
+           location == "Oakland Unified"|
+           location == "Orange Unified"|
+           location == "Pasadena Unified"|
+           location == "Sacramento City Unified"|
+           location == "San Diego Unified"|
+           location == "San Francisco Unified"|
+           location == "San Marcos Unified"|
+           location == "Sunnyvale"|
+           location == "Sweetwater Union High"|
+           location == "West Contra Costa Unified") %>% 
+  mutate(district = location,
+         swd_dist = swd) %>% 
+  select(district, swd_dist)
+sort(unique(memb_enrl$county))
+swd_county <- swd %>% 
+  filter(locationtype=="County") %>% 
+  mutate(county = gsub(" County","",location),
+         swd_county = swd) %>% 
+  filter(county == "Alameda"|
+           county == "Contra Costa"|
+           county == "Los Angeles"|
+           county == "Orange"|
+           county == "Sacramento"|
+           county == "San Diego"|
+           county == "San Francisco"|
+           county == "San Mateo"|
+           county == "Santa Clara") %>% 
+  select(county, swd_county)
+memb_enrl <- merge(memb_enrl,swd_dist,by="district")
+memb_enrl <- merge(memb_enrl, swd_county, by= "county")
+
+write.csv(memb_enrl, file = file.path('output data/ca_enrl.csv'),row.names = FALSE)
