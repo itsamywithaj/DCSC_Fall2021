@@ -113,3 +113,53 @@ memb_enrl <- memb_enrl %>%
          ell = ell/total)
 
 # ---- SPECIAL EDUCATION? ----- 
+# https://www.nj.gov/education/specialed/data/2020.htm#class
+# Only 2020 classification rates available
+
+swd <- read_excel('raw data/NJ_Lea_Classification_Pub.xlsx')
+swd_doc <- swd[1,1]
+swd_doc %>% names()
+names(swd) <- tolower(swd[4,])
+swd <- swd[-(1:4),]
+str(swd)
+
+swd <- swd %>% 
+  mutate(county = `county name`,
+         district = `district name`,
+         total = as.numeric(`general ed. enrollment`),
+         swd = as.numeric(`special ed. enrollment`)) %>% 
+  select(county, district, total, swd)
+
+memb_swd <- swd %>% 
+  filter(district == "Hoboken Cs") %>% 
+  mutate(school = "Hoboken Charter School",
+         swd = swd/total) %>% 
+  select(school, swd)
+
+memb_enrl <- memb_enrl %>% 
+  merge(memb_swd)
+
+swd_agg <- swd %>% 
+  filter(county == "Hudson") %>% 
+  group_by(county) %>% 
+  summarize(total = sum(total),
+            swd = sum(swd)) %>% 
+  mutate(cty_swd = swd/total) %>% 
+  select(county, cty_swd) %>% 
+  merge(memb_enrl)
+
+memb_enrl <- swd_agg
+
+swd_agg <- swd %>% 
+  filter(district == "Hoboken City") %>% 
+  mutate(district = "Hoboken Public School District",
+         dist_swd = swd/total) %>% 
+  select(district, dist_swd)
+
+memb_enrl <- memb_enrl %>% merge(swd_agg)
+
+# Prep for export -----
+memb_enrl <- memb_enrl %>% 
+  select(school:ell,swd, ls_dist, ls_cty, district, dist_total:dist_ell,dist_swd,
+         county, cty_total:cty_ell,cty_swd)
+write.csv(memb_enrl,file = file.path('output data/nj_enrl.csv'),row.names = FALSE)
